@@ -6,6 +6,7 @@ pub struct CommitNode {
     pub author: String,
     pub timestamp: Time,
     pub parents: Vec<Oid>,
+    pub position: (f32, f32),
 }
 
 impl CommitNode {
@@ -15,6 +16,7 @@ impl CommitNode {
         author: String,
         timestamp: Time,
         parents: Vec<Oid>,
+        position: (f32, f32),
     ) -> Self {
         CommitNode {
             oid,
@@ -22,6 +24,7 @@ impl CommitNode {
             author,
             timestamp,
             parents,
+            position,
         }
     }
 }

@@ -16,32 +16,66 @@ fn main() -> Result<(), Box<dyn Error>> {
     rewalk.push_head()?;
     let mut commits: Vec<CommitNode> = Vec::new();
     // why make new vec when loop in rewalk can find_commit and process in same time.
-    let mut position: HashMap<Oid, f32> = HashMap::new();
+    let mut map_oid: HashMap<Oid, usize> = HashMap::new();
     let mut lanes = Lane::new(vec![]);
     for (index, commit_oid) in rewalk.enumerate() {
         let commit_oid = commit_oid?;
         let commit = repo.find_commit(commit_oid)?;
-        let commit_node = CommitNode::new(
+        let mut commit_node = CommitNode::new(
             commit.id(),
             commit.message().unwrap_or_default().to_string(),
             commit.author().email().unwrap_or_default().to_string(),
             commit.time(),
             commit.parents().map(|parent| parent.id()).collect(),
+            (0.0, 0.0),
         );
-        commits.push(commit_node);
+        map_oid.insert(commit.id(), index);
         if index == 0 {
             // render line && circle
+            lanes
+                .commits
+                .splice(0..0, commit.parents().map(|parent| parent.id()).map(Some));
+
+            commit_node.position = (START, WIDTH);
+            commits.push(commit_node);
+            continue;
+        }
+
+        if !lanes.commits.contains(&Some(commit.id())) {
+            // render line && circle
             lanes.commits.push(Some(commit.id()));
-            position.insert(commit.id(), START * index as f32);
+            let w = lanes
+                .commits
+                .iter()
+                .position(|&id| id == Some(commit.id()))
+                .ok_or("Failed to find commit position")?;
+            commit_node.position = (START * index as f32, WIDTH * w as f32);
+            // lane
+            commits.push(commit_node);
+            lanes.commits.iter_mut().for_each(|x| {
+                if *x == Some(commit.id()) {
+                    *x = None;
+                }
+            });
+            lanes
+                .commits
+                .splice(0..0, commit.parents().map(|parent| parent.id()).map(Some));
             continue;
         }
 
         if lanes.commits.contains(&Some(commit.id())) {
             // render line && circle
             lanes.commits.push(Some(commit.id()));
-            position.remove(&commit.id());
+            let w = lanes
+                .commits
+                .iter()
+                .position(|&id| id == Some(commit.id()))
+                .ok_or("Failed to find commit position")?;
+            commit_node.position = (START * index as f32, WIDTH * w as f32);
+
             // lane
-            position.insert(commit.id(), START * index as f32);
+            commits.push(commit_node);
+            lanes.commits.push(Some(commit.id()));
             continue;
         }
     }
