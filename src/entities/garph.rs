@@ -16,15 +16,18 @@ impl Garph {
     }
 
     pub fn create_node(&self, node: CommitNode) -> impl IntoElement {
-        div()
-            .absolute()
-            .bg(gpui::green())
-            .border_1()
-            .border_color(gpui::black())
-            .rounded(px(20.0))
-            .size(px(10.0))
-            .bottom(px(node.position.0))
-            .left(px(node.position.1))
+        div().absolute().bottom(px(node.position.0)).children([
+            div()
+                .bg(gpui::green())
+                .border_color(gpui::black())
+                .rounded(px(20.0))
+                .size(px(10.0))
+                .left(px(node.position.1)),
+            div()
+                .bg(gpui::red())
+                .child(format!("{:?}", node.timestamp))
+                .left(px(node.position.1 + 10.0)),
+        ])
     }
 }
 

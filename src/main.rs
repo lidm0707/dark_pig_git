@@ -7,7 +7,7 @@ use gpui::{App, AppContext, Application, Bounds, WindowBounds, WindowOptions, px
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
-const START_X: f32 = 10.0;
+const START_X: f32 = 800.0;
 const LANE_WIDTH: f32 = 5.0;
 const COMMIT_HEIGHT: f32 = 20.0;
 
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let garph = Garph::new(commits);
 
     Application::new().run(|cx: &mut App| {
-        let bounds = Bounds::centered(None, size(px(800.), px(600.0)), cx);
+        let bounds = Bounds::centered(None, size(px(500.), px(500.0)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
