@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Second pass: Assign lanes and calculate positions
     for (index, commit_node) in commits.iter_mut().enumerate() {
-        let lane_id = lane_manager.assign_commit(commit_node.oid, &commit_node.parents);
+        let lane_id = lane_manager.assign_commit(&commit_node.oid, &commit_node.parents);
         let lane_position = lane_id as f32;
 
         // Calculate position based on lane and index
