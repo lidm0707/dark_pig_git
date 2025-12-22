@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 const START_X: f32 = 10.0;
-const LANE_WIDTH: f32 = 80.0;
-const COMMIT_HEIGHT: f32 = 50.0;
+const LANE_WIDTH: f32 = 20.0;
+const COMMIT_HEIGHT: f32 = 20.0;
 
 fn main() -> Result<(), Box<dyn Error>> {
     dotenv().ok();

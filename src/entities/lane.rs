@@ -31,14 +31,12 @@ impl LaneManager {
             self.lanes[index] = None;
 
             for parent_oid in parent_oids {
-                if !self.lanes.contains(&Some(*parent_oid)) {
-                    self.lanes.push(Some(*parent_oid));
-                } else {
-                    for i in 0..self.lanes.len() {
-                        if self.lanes[i].is_none() {
-                            self.lanes[i] = Some(*parent_oid);
-                            break;
-                        }
+                for i in 0..self.lanes.len() {
+                    if self.lanes[i].is_none() {
+                        self.lanes[i] = Some(*parent_oid);
+                        break;
+                    } else {
+                        self.lanes.push(Some(*parent_oid));
                     }
                 }
             }
@@ -46,14 +44,12 @@ impl LaneManager {
             return index;
         } else {
             for parent_oid in parent_oids {
-                if !self.lanes.contains(&Some(*parent_oid)) {
-                    self.lanes.push(Some(*parent_oid));
-                } else {
-                    for i in 0..self.lanes.len() {
-                        if self.lanes[i].is_none() {
-                            self.lanes[i] = Some(*parent_oid);
-                            break;
-                        }
+                for i in 0..self.lanes.len() {
+                    if self.lanes[i].is_none() {
+                        self.lanes[i] = Some(*parent_oid);
+                        break;
+                    } else {
+                        self.lanes.push(Some(*parent_oid));
                     }
                 }
             }
