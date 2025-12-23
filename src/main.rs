@@ -1,14 +1,15 @@
 use dark_pig_git::entities::commit::CommitNode;
+use dark_pig_git::entities::edge::{Edge, EdgeManager};
 use dark_pig_git::entities::garph::Garph;
 use dark_pig_git::entities::lane::LaneManager;
 use dotenv::dotenv;
 use git2::Oid;
-use gpui::{App, AppContext, Application, Bounds, Path, WindowBounds, WindowOptions, px, size};
+use gpui::{App, AppContext, Application, Bounds, WindowBounds, WindowOptions, px, size};
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
-const START_X: f32 = 800.0;
-const LANE_WIDTH: f32 = 1.0;
+const START_X: f32 = 30.0;
+const LANE_WIDTH: f32 = 10.0;
 const COMMIT_HEIGHT: f32 = 20.0;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -20,6 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut commits: Vec<CommitNode> = Vec::new();
     let mut map_oid: HashMap<Oid, usize> = HashMap::new();
     let mut lane_manager = LaneManager::new();
+    let mut edge_manager = EdgeManager::new();
     // First pass: Collect all commits
     for (index, commit_oid) in rewalk.enumerate() {
         let commit_oid = commit_oid?;
@@ -41,7 +43,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Sort commits by timestamp to ensure proper chronological order
     commits.sort_by(|a, b| b.timestamp.seconds().cmp(&a.timestamp.seconds()));
-
+    map_oid.clear();
+    for (index, commit) in commits.iter().enumerate() {
+        map_oid.insert(commit.oid, index);
+    }
     // Second pass: Assign lanes and calculate positions
     for (index, commit_node) in commits.iter_mut().enumerate() {
         let lane_id = lane_manager.assign_commit(&commit_node.oid, &commit_node.parents);
@@ -49,21 +54,42 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // Calculate position based on lane and index
         commit_node.position = (
-            START_X - (index as f32 * COMMIT_HEIGHT),
-            LANE_WIDTH * lane_position,
+            START_X + (lane_position * LANE_WIDTH),
+            COMMIT_HEIGHT * index as f32,
         );
     }
 
+    // Third pass: Create edges between commits
+    for commit_node in &commits {
+        let from = gpui::Point::new(
+            px(commit_node.position.0) + 6.5.into(),
+            px(commit_node.position.1),
+        );
+
+        for parent_oid in &commit_node.parents {
+            if let Some(parent_index) = map_oid.get(parent_oid) {
+                let parent = &commits[*parent_index];
+
+                let to =
+                    gpui::Point::new(px(parent.position.0) + 6.5.into(), px(parent.position.1));
+
+                edge_manager.add(from, to);
+            }
+        }
+    }
+
     println!(
-        "Processed {} commits with {} lanes",
+        "Processed {} commits with {} lanes and {} edges {:?}",
         commits.len(),
-        lane_manager.lanes.len()
+        lane_manager.lanes.len(),
+        edge_manager.edges.len(),
+        edge_manager.edges
     );
 
-    let garph = Garph::new(commits);
+    let garph = Garph::new(commits, edge_manager);
 
     Application::new().run(|cx: &mut App| {
-        let bounds = Bounds::centered(None, size(px(500.), px(500.0)), cx);
+        let bounds = Bounds::centered(None, size(px(1800.), px(800.0)), cx);
 
         cx.open_window(
             WindowOptions {
@@ -71,6 +97,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ..Default::default()
             },
             |_, cx| cx.new(|_| garph),
+            //            |_, cx| cx.new(|_| edge_manager),
         )
         .unwrap();
     });

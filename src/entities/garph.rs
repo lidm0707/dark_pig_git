@@ -1,107 +1,135 @@
+use std::mem::offset_of;
+
 use gpui::{
-    Context, InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement,
-    Styled, Window, div, px,
+    Context, InteractiveElement, IntoElement, ParentElement, PathBuilder, Render,
+    StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
 
 use crate::entities::commit::CommitNode;
+use crate::entities::edge::EdgeManager;
+
 #[derive(Debug, Clone)]
 pub struct Garph {
     pub nodes: Vec<CommitNode>,
-    // pub edges: Vec<Edge>,
+    pub edge_manager: EdgeManager,
 }
 
 impl Garph {
-    pub fn new(nodes: Vec<CommitNode>) -> Self {
-        Garph { nodes }
+    pub fn new(nodes: Vec<CommitNode>, edge_manager: EdgeManager) -> Self {
+        Garph {
+            nodes,
+            edge_manager,
+        }
     }
 
     pub fn create_node(&self, node: CommitNode) -> impl IntoElement {
-        // div().absolute().bottom(px(node.position.0)).children([
-        //     div()
-        //         .bg(gpui::green())
-        //         .border_color(gpui::black())
-        //         .rounded(px(20.0))
-        //         .size(px(10.0))
-        //         .left(px(node.position.1)),
-        //     div()
-        //         .bg(gpui::red())
-        //         .child(format!("{:?}", node.timestamp.seconds()))
-        //         .left(px(node.position.1 + 10.0)),
-        // ])
+        // Adjust positioning to match edge coordinates
+        let x = node.position.0; // X position (from START_X minus commit height)
+        let y = node.position.1; // Y position (based on lane)
+
         div()
             .absolute()
-            .left(px(node.position.1)) // 🔑 จุดเริ่มเดียวกัน
-            .bottom(px(node.position.0))
-            .flex_row()
-            .gap(px(4.0))
-            .children([
-                // ===== box 1 : node =====
-                div()
-                    .w(px(80.0))
-                    .bg(gpui::green())
-                    .flex_col()
-                    .border_color(gpui::black())
-                    .rounded(px(20.0))
-                    .size(px(10.0)),
-                // ===== box 2 : time =====
-            ])
+            .left(px(x)) // Scale lane position for better visibility
+            .top(px(y)) // Adjusted Y position (inverted for proper display)
+            .w(px(10.0))
+            .h(px(10.0))
+            .bg(gpui::green())
+            .border_color(gpui::black())
+            .rounded(px(5.0))
     }
 
-    fn create_row_node(&self, node: CommitNode) -> impl IntoElement {
+    pub fn create_row_with_node(&self, node: CommitNode, index: usize) -> impl IntoElement {
+        // Calculate the Y position to match the node position
+        let y_pos = 800.0 - (index as f32 * 20.0); // Match the node Y position
+
         div()
-            .bg(gpui::red())
-            .flex_col()
-            .flex_grow()
-            .px(px(6.0))
-            .py(px(2.0))
-            .rounded(px(4.0))
-            .child(format!("{:?}", node.timestamp.seconds()))
+            .absolute()
+            .top(px(y_pos))
+            .left(px(220.0)) // Position to the right of the graph
+            .flex_row()
+            .gap(px(10.0))
+            .children([
+                // Commit details
+                div()
+                    .bg(gpui::rgb(0x383838))
+                    .min_w(px(600.0))
+                    .px(px(10.0))
+                    .py(px(5.0))
+                    .rounded(px(4.0))
+                    .child(
+                        div().gap_1().children([
+                            div()
+                                .text_color(gpui::white())
+                                .text_size(px(12.0))
+                                .child(format!(
+                                    "{}",
+                                    node.message.split('\n').next().unwrap_or_default()
+                                )),
+                            div()
+                                .text_color(gpui::rgb(0x969696))
+                                .text_size(px(10.0))
+                                .child(format!("{} - {}", node.author, node.timestamp.seconds())),
+                        ]),
+                    ),
+            ])
     }
 }
 
 impl Render for Garph {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        let meta = self.clone();
-        let space = 500.0;
-        let rows = self
-            .nodes
-            .clone()
-            .into_iter()
-            .map(|node| {
-                div()
-                    .h(px(32.0)) // ความสูงต่อแถว
-                    .flex()
-                    .flex_row()
-                    .children([
-                        // ===== LEFT : node column =====
-                        div()
-                            .w(px(space / 3.0))
-                            .mr(px(10.0))
-                            .flex()
-                            .items_center()
-                            .child(meta.create_node(node.clone())),
-                        // ===== RIGHT : time column =====
-                        div()
-                            .w(px(space / 1.0))
-                            .flex()
-                            .items_center()
-                            .child(meta.create_row_node(node)),
-                    ])
-            })
-            .collect::<Vec<_>>();
+        let edges = self.edge_manager.edges.clone();
 
+        // Create a container that will handle scrolling for everything
         div()
-            .size(px(800.0))
+            .size_full()
             .bg(gpui::rgb(0x282828))
             .id("dag")
             .overflow_scroll()
-            .child(
-                div()
-                    .w(px(480.0))
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.0))
-                    .children(rows),
-            )
+            .relative()
+            .children([
+                // Container that's larger than viewport to allow scrolling
+                div().relative().w(px(2000.0)).h(px(2000.0)).children([
+                    // Canvas for edges (same size as container)
+                    div()
+                        .relative()
+                        .top(px(0.))
+                        .left(px(0.))
+                        .size_full()
+                        .child(canvas(
+                            move |_, _, _| {},
+                            move |bounds, _, window, _| {
+                                for edge in &edges {
+                                    let offset = bounds.origin;
+                                    let mut path = PathBuilder::stroke(px(1.5));
+                                    path.move_to(edge.from + offset);
+                                    path.line_to(edge.to + offset);
+
+                                    if let Ok(p) = path.build() {
+                                        window.paint_path(p, gpui::white());
+                                    }
+                                }
+                            },
+                        )),
+                    // Nodes positioned absolutely within the container
+                    div()
+                        .absolute()
+                        .top(px(0.))
+                        .left(px(0.))
+                        .size_full()
+                        .children(self.nodes.iter().map(|node| self.create_node(node.clone()))),
+                    // Commit details in rows
+                    div()
+                        .absolute()
+                        .top(px(0.))
+                        .left(px(220.0))
+                        .size_full()
+                        .children(
+                            self.nodes
+                                .iter()
+                                .enumerate()
+                                .map(|(i, node)| self.create_row_with_node(node.clone(), i)),
+                        ),
+                ]),
+            ])
     }
 }

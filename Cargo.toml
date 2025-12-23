@@ -7,3 +7,4 @@ edition = "2024"
 dotenv = "0.15.0"
 git2 = "0.20.3"
 gpui = { version = "*" }
+lyon = {version = "1", features = ["extra"]}

@@ -1,5 +1,4 @@
 use git2::Oid;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct LaneManager {
@@ -8,59 +7,43 @@ pub struct LaneManager {
 
 impl LaneManager {
     pub fn new() -> Self {
-        LaneManager { lanes: Vec::new() }
+        Self { lanes: Vec::new() }
     }
 
     pub fn get_lanes(&self) -> &[Option<Oid>] {
         &self.lanes
     }
 
+    /// assign commit to a lane and update lanes for parents
     pub fn assign_commit(&mut self, commit_oid: &Oid, parent_oids: &[Oid]) -> usize {
-        if self.lanes.is_empty() {
-            self.lanes
-                .splice(0..0, parent_oids.iter().map(|oid| Some(*oid)));
-            return 1;
+        // 1️⃣ หา lane ที่รอ commit นี้
+        let mut lane = self
+            .lanes
+            .iter()
+            .position(|slot| slot.as_ref() == Some(commit_oid));
+
+        // 2️⃣ ถ้าไม่เจอ → สร้าง lane ใหม่
+        let lane = match lane {
+            Some(i) => i,
+            None => {
+                self.lanes.push(None);
+                self.lanes.len() - 1
+            }
+        };
+
+        // 3️⃣ clear lane ปัจจุบัน (commit consume แล้ว)
+        self.lanes[lane] = None;
+
+        // 4️⃣ parent ตัวแรก → ใช้ lane เดิม
+        if let Some(first_parent) = parent_oids.first() {
+            self.lanes[lane] = Some(*first_parent);
         }
 
-        if self.lanes.contains(&Some(*commit_oid)) {
-            let index = self
-                .lanes
-                .iter()
-                .position(|oid| oid == &Some(*commit_oid))
-                .unwrap();
-            self.lanes[index] = None;
-
-            for parent_oid in parent_oids {
-                for i in 0..self.lanes.len() {
-                    if self.lanes[i].is_none() {
-                        self.lanes[i] = Some(*parent_oid);
-                        break;
-                    } else {
-                        self.lanes.push(Some(*parent_oid));
-                    }
-                }
-            }
-
-            return index;
-        } else {
-            for parent_oid in parent_oids {
-                for i in 0..self.lanes.len() {
-                    if self.lanes[i].is_none() {
-                        self.lanes[i] = Some(*parent_oid);
-                        break;
-                    } else {
-                        self.lanes.push(Some(*parent_oid));
-                    }
-                }
-            }
-            let mut count = 0;
-            for node in self.lanes.iter() {
-                if !node.is_some() {
-                    count += 1;
-                }
-            }
-
-            return count;
+        // 5️⃣ parent ที่เหลือ → เปิด lane ใหม่ (merge)
+        for parent in parent_oids.iter().skip(1) {
+            self.lanes.push(Some(*parent));
         }
+
+        lane
     }
 }
