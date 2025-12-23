@@ -3,12 +3,12 @@ use dark_pig_git::entities::garph::Garph;
 use dark_pig_git::entities::lane::LaneManager;
 use dotenv::dotenv;
 use git2::Oid;
-use gpui::{App, AppContext, Application, Bounds, WindowBounds, WindowOptions, px, size};
+use gpui::{App, AppContext, Application, Bounds, Path, WindowBounds, WindowOptions, px, size};
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 const START_X: f32 = 800.0;
-const LANE_WIDTH: f32 = 5.0;
+const LANE_WIDTH: f32 = 1.0;
 const COMMIT_HEIGHT: f32 = 20.0;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -64,6 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Application::new().run(|cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(500.), px(500.0)), cx);
+
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
