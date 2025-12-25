@@ -8,6 +8,7 @@ use gpui::{App, AppContext, Application, Bounds, WindowBounds, WindowOptions, px
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
+use std::ops::Sub;
 const START_X: f32 = 30.0;
 const LANE_WIDTH: f32 = 15.0;
 const COMMIT_HEIGHT: f32 = 20.0;
@@ -19,6 +20,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut rewalk = repo.revwalk()?;
     rewalk.push_head()?;
     let mut commits: Vec<CommitNode> = Vec::new();
+    commits.sort_by_key(|c| std::cmp::Reverse(c.timestamp.seconds()));
+
     let mut map_oid: HashMap<Oid, usize> = HashMap::new();
     let mut lane_manager = LaneManager::new();
     let mut edge_manager = EdgeManager::new();
@@ -41,13 +44,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         commits.push(commit_node);
     }
 
-    // Sort commits by timestamp to ensure proper chronological order
-    commits.sort_by(|a, b| b.timestamp.seconds().cmp(&a.timestamp.seconds()));
-    map_oid.clear();
-    for (index, commit) in commits.iter().enumerate() {
-        map_oid.insert(commit.oid, index);
-    }
-    // Second pass: Assign lanes and calculate positions
     for (index, commit_node) in commits.iter_mut().enumerate() {
         let lane_id = lane_manager.assign_commit(&commit_node.oid, &commit_node.parents);
         let lane_position = lane_id as f32;
@@ -57,6 +53,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             START_X + (lane_position * LANE_WIDTH),
             COMMIT_HEIGHT * index as f32,
         );
+
+        // let from = gpui::Point::new(px(commit_node.position.0 + 5.0), px(commit_node.position.1));
+
+        // for parent in &commit_node.parents {
+        //     if let Some(&pi) = map_oid.get(parent) {
+        //         let to =
+        //             gpui::Point::new(px(commit_node.position.0 + 5.0), px(commit_node.position.1));
+
+        //         edge_manager.add(from, to);
+        //     }
+        // }
     }
 
     // Third pass: Create edges between commits
@@ -77,15 +84,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-
-    println!(
-        "Processed {} commits with {} lanes and {} at {:?}",
-        commits.len(),
-        lane_manager.lanes.len(),
-        edge_manager.edges.len(),
-        // edge_manager.edges,
-        commits[commits.len() - 1]
-    );
+    // println!(
+    //     "Processed {} commits with {} lanes and {} edges {:?}",
+    //     commits.len(),
+    //     lane_manager.lanes.len(),
+    //     edge_manager.edges.len(),
+    //     edge_manager.edges,
+    //     // commits[commits.len().sub(1)]
+    // );
 
     let garph = Garph::new(commits, edge_manager);
 

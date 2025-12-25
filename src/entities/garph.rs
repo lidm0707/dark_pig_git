@@ -2,8 +2,8 @@ use std::mem::offset_of;
 
 use chrono::DateTime;
 use gpui::{
-    Context, InteractiveElement, IntoElement, ParentElement, PathBuilder, Render,
-    StatefulInteractiveElement, Styled, Window, canvas, div, px,
+    Context, InteractiveElement, IntoElement, ParentElement, PathBuilder, Point, Render,
+    StatefulInteractiveElement, Styled, Window, canvas, div, point, px,
 };
 
 use crate::entities::commit::CommitNode;
@@ -94,12 +94,29 @@ impl Render for Garph {
                             move |_, _, _| {},
                             move |bounds, _, window, _| {
                                 let offset = bounds.origin;
-
                                 for edge in &edges {
                                     let mut path = PathBuilder::stroke(px(1.5));
-                                    path.move_to(edge.from + offset);
-                                    path.line_to(edge.to + offset);
+                                    let size_node = Point::new(px(0.0), px(6.0));
+                                    let start = edge.from + offset + size_node;
+                                    let end = edge.to + offset + size_node;
 
+                                    path.move_to(start);
+                                    let same_lane = (start.x - end.x).abs() < px(0.5);
+
+                                    if same_lane {
+                                        // เส้นตรงยาว
+                                        path.line_to(end);
+                                    } else if start.x > end.x {
+                                        let ctrl1 = Point::new(start.x, end.y);
+                                        let ctrl2 = Point::new(start.x, end.y);
+
+                                        path.cubic_bezier_to(end, ctrl1, ctrl2);
+                                    } else if start.x < end.x {
+                                        let ctrl1 = Point::new(end.x, start.y);
+                                        let ctrl2 = Point::new(end.x, start.y);
+
+                                        path.cubic_bezier_to(end, ctrl1, ctrl2);
+                                    }
                                     if let Ok(p) = path.build() {
                                         window.paint_path(p, gpui::white());
                                     }
