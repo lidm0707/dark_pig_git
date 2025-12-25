@@ -32,25 +32,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         let commit = repo.find_commit(commit_oid)?;
         let parent_ids: Vec<Oid> = commit.parents().map(|parent| parent.id()).collect();
 
-        let mut commit_node = CommitNode::new(
-            commit.id(),
-            commit.message().unwrap_or_default().to_string(),
-            commit.author().email().unwrap_or_default().to_string(),
-            commit.time(),
-            parent_ids.clone(),
-            Point::new(px(0.0), px(0.0)),
-        );
-
         let lane_id = lane_manager.assign_commit(&commit_oid, &parent_ids);
         //
         let lane_position = lane_id as f32;
-
         let current_position: Point<Pixels> = Point::new(
             (START_X + (lane_position * LANE_WIDTH)).into(),
             (COMMIT_HEIGHT * index as f32).into(),
         );
         // Calculate position based on lane and index
-        commit_node.position = current_position;
 
         // map_oid.insert(commit.id(), index);
 
@@ -61,13 +50,23 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         for parent_oid in &parent_ids {
-            if let Some(pixels) = map_oid.get_mut(&parent_oid) {
-                pixels.push(current_position);
-            } else {
-                map_oid.insert(parent_oid.clone(), vec![current_edge]);
+            match map_oid.get_mut(&parent_oid) {
+                Some(pixels) => {
+                    pixels.push(current_position);
+                }
+                None => {
+                    map_oid.insert(parent_oid.clone(), vec![current_edge]);
+                }
             }
         }
-
+        let commit_node = CommitNode::new(
+            commit.id(),
+            commit.message().unwrap_or_default().to_string(),
+            commit.author().email().unwrap_or_default().to_string(),
+            commit.time(),
+            parent_ids.clone(),
+            current_position,
+        );
         commits.push(commit_node.clone());
     }
 

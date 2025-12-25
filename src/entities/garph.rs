@@ -1,9 +1,7 @@
-use std::mem::offset_of;
-
 use chrono::DateTime;
 use gpui::{
     Context, InteractiveElement, IntoElement, ParentElement, PathBuilder, Point, Render,
-    StatefulInteractiveElement, Styled, Window, canvas, div, point, px,
+    StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
 
 use crate::entities::commit::CommitNode;
