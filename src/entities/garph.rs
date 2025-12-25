@@ -25,13 +25,13 @@ impl Garph {
 
     pub fn create_node(&self, node: CommitNode) -> impl IntoElement {
         // Adjust positioning to match edge coordinates
-        let x = node.position.0; // X position (from START_X minus commit height)
-        let y = node.position.1; // Y position (based on lane)
+        let x = node.position.x; // X position (from START_X minus commit height)
+        let y = node.position.y; // Y position (based on lane)
 
         div()
             .absolute()
-            .left(px(x)) // Scale lane position for better visibility
-            .top(px(y)) // Adjusted Y position (inverted for proper display)
+            .left(x) // Scale lane position for better visibility
+            .top(y) // Adjusted Y position (inverted for proper display)
             .w(px(10.0))
             .h(px(10.0))
             .bg(gpui::green())
@@ -39,12 +39,12 @@ impl Garph {
             .rounded(px(5.0))
     }
 
-    pub fn create_row_with_node(&self, node: CommitNode, index: usize) -> impl IntoElement {
+    pub fn create_row_with_node(&self, node: CommitNode) -> impl IntoElement {
         // Calculate the Y position to match the node position
 
         div()
             .absolute()
-            .top(px(node.position.1))
+            .top(node.position.y)
             .left(px(1.0)) // Position to the right of the graph
             .flex_row()
             .gap(px(20.0))
@@ -139,8 +139,7 @@ impl Render for Garph {
                         div().absolute().top(px(0.)).left(px(100.)).children(
                             self.nodes
                                 .iter()
-                                .enumerate()
-                                .map(|(i, n)| self.create_row_with_node(n.clone(), i)),
+                                .map(|n| self.create_row_with_node(n.clone())),
                         ),
                     ),
             )

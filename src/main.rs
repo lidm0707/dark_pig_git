@@ -1,14 +1,13 @@
 use dark_pig_git::entities::commit::CommitNode;
-use dark_pig_git::entities::edge::{Edge, EdgeManager};
+use dark_pig_git::entities::edge::EdgeManager;
 use dark_pig_git::entities::garph::Garph;
 use dark_pig_git::entities::lane::LaneManager;
 use dotenv::dotenv;
 use git2::Oid;
-use gpui::{App, AppContext, Application, Bounds, WindowBounds, WindowOptions, px, size};
+use gpui::{App, AppContext, Application, Pixels, Point, WindowOptions, px};
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
-use std::ops::Sub;
 const START_X: f32 = 30.0;
 const LANE_WIDTH: f32 = 15.0;
 const COMMIT_HEIGHT: f32 = 20.0;
@@ -18,11 +17,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path_repo = env::var("GIT_REPO_PATH")?;
     let repo = git2::Repository::open(&path_repo)?;
     let mut rewalk = repo.revwalk()?;
+    rewalk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME)?;
     rewalk.push_head()?;
     let mut commits: Vec<CommitNode> = Vec::new();
-    commits.sort_by_key(|c| std::cmp::Reverse(c.timestamp.seconds()));
+    // let mut map_oid: HashMap<Oid, usize> = HashMap::new();
+    let mut map_oid: HashMap<Oid, Vec<Point<Pixels>>> = HashMap::new();
 
-    let mut map_oid: HashMap<Oid, usize> = HashMap::new();
+    // from
     let mut lane_manager = LaneManager::new();
     let mut edge_manager = EdgeManager::new();
     // First pass: Collect all commits
@@ -31,67 +32,44 @@ fn main() -> Result<(), Box<dyn Error>> {
         let commit = repo.find_commit(commit_oid)?;
         let parent_ids: Vec<Oid> = commit.parents().map(|parent| parent.id()).collect();
 
-        let commit_node = CommitNode::new(
+        let mut commit_node = CommitNode::new(
             commit.id(),
             commit.message().unwrap_or_default().to_string(),
             commit.author().email().unwrap_or_default().to_string(),
             commit.time(),
             parent_ids.clone(),
-            (0.0, 0.0),
+            Point::new(px(0.0), px(0.0)),
         );
 
-        map_oid.insert(commit.id(), index);
-        commits.push(commit_node);
-    }
-
-    for (index, commit_node) in commits.iter_mut().enumerate() {
-        let lane_id = lane_manager.assign_commit(&commit_node.oid, &commit_node.parents);
+        let lane_id = lane_manager.assign_commit(&commit_oid, &parent_ids);
+        //
         let lane_position = lane_id as f32;
 
+        let current_position: Point<Pixels> = Point::new(
+            (START_X + (lane_position * LANE_WIDTH)).into(),
+            (COMMIT_HEIGHT * index as f32).into(),
+        );
         // Calculate position based on lane and index
-        commit_node.position = (
-            START_X + (lane_position * LANE_WIDTH),
-            COMMIT_HEIGHT * index as f32,
-        );
+        commit_node.position = current_position;
 
-        // let from = gpui::Point::new(px(commit_node.position.0 + 5.0), px(commit_node.position.1));
+        // map_oid.insert(commit.id(), index);
 
-        // for parent in &commit_node.parents {
-        //     if let Some(&pi) = map_oid.get(parent) {
-        //         let to =
-        //             gpui::Point::new(px(commit_node.position.0 + 5.0), px(commit_node.position.1));
-
-        //         edge_manager.add(from, to);
-        //     }
-        // }
-    }
-
-    // Third pass: Create edges between commits
-    for commit_node in &commits {
-        let from = gpui::Point::new(
-            px(commit_node.position.0) + 5.0.into(), // 5.0 = 10/2 size of node
-            px(commit_node.position.1),
-        );
-
-        for parent_oid in &commit_node.parents {
-            if let Some(parent_index) = map_oid.get(parent_oid) {
-                let parent = &commits[*parent_index];
-
-                let to =
-                    gpui::Point::new(px(parent.position.0) + 5.0.into(), px(parent.position.1)); // 5.0 = 10/2 size of node
-
-                edge_manager.add(from, to);
+        let current_edge = Point::new(current_position.x + 5.0.into(), current_position.y);
+        if let Some(pixels) = map_oid.get(&commit_oid) {
+            for px in pixels {
+                edge_manager.add(px.clone(), current_edge);
             }
         }
+        for parent_oid in &parent_ids {
+            if let Some(pixels) = map_oid.get_mut(&parent_oid) {
+                pixels.push(current_position);
+            } else {
+                map_oid.insert(parent_oid.clone(), vec![current_edge]);
+            }
+        }
+
+        commits.push(commit_node.clone());
     }
-    // println!(
-    //     "Processed {} commits with {} lanes and {} edges {:?}",
-    //     commits.len(),
-    //     lane_manager.lanes.len(),
-    //     edge_manager.edges.len(),
-    //     edge_manager.edges,
-    //     // commits[commits.len().sub(1)]
-    // );
 
     let garph = Garph::new(commits, edge_manager);
 

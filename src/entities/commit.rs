@@ -1,4 +1,5 @@
 use git2::{Oid, Time};
+use gpui::{Pixels, Point};
 #[derive(Debug, Clone)]
 pub struct CommitNode {
     pub oid: Oid,
@@ -6,7 +7,7 @@ pub struct CommitNode {
     pub author: String,
     pub timestamp: Time,
     pub parents: Vec<Oid>,
-    pub position: (f32, f32),
+    pub position: Point<Pixels>,
 }
 
 impl CommitNode {
@@ -16,7 +17,7 @@ impl CommitNode {
         author: String,
         timestamp: Time,
         parents: Vec<Oid>,
-        position: (f32, f32),
+        position: Point<Pixels>,
     ) -> Self {
         CommitNode {
             oid,

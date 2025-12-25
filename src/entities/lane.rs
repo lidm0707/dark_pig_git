@@ -16,7 +16,6 @@ impl LaneManager {
 
     /// assign commit to a lane and update lanes for parents
     pub fn assign_commit(&mut self, commit_oid: &Oid, parent_oids: &[Oid]) -> usize {
-        // 1️⃣ หา lane ของ commit
         let mut lane = match self
             .lanes
             .iter()
@@ -29,10 +28,8 @@ impl LaneManager {
             }
         };
 
-        // 2️⃣ consume commit
         self.lanes[lane] = None;
 
-        // 3️⃣ หา parent ที่มี lane อยู่แล้ว
         let mut continue_parent = None;
         let mut parent_lane = None;
 
