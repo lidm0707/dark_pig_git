@@ -4,14 +4,18 @@ use git2::Oid;
 use gpui::{Pixels, Point};
 
 pub struct HistoryOid {
-    pub point: Point<Pixels>,
+    pub edge_point: Point<Pixels>,
     pub color: usize,
     pub lane: usize,
 }
 
 impl HistoryOid {
     pub fn new(point: Point<Pixels>, color: usize, lane: usize) -> Self {
-        Self { point, color, lane }
+        Self {
+            edge_point: point,
+            color,
+            lane,
+        }
     }
 }
 

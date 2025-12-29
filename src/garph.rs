@@ -78,16 +78,16 @@ impl Garph {
             // connect edges
             if let Some(history_oids) = history_oids_manager.get(&oid) {
                 for history in history_oids {
-                    if history.point.x > current_edge_point.x {
-                        edge_manager.add(history.point, current_edge_point, history.color);
+                    if history.edge_point.x > current_edge_point.x {
+                        edge_manager.add(history.edge_point, current_edge_point, history.color);
 
                         if history.lane > 0 {
                             color_manager.remove_lane_color(&history.lane);
                         }
-                    } else if history.point.x < current_edge_point.x {
-                        edge_manager.add(current_edge_point, history.point, color);
+                    } else if history.edge_point.x < current_edge_point.x {
+                        edge_manager.add(current_edge_point, history.edge_point, color);
                     } else {
-                        edge_manager.add(history.point, current_edge_point, history.color);
+                        edge_manager.add(history.edge_point, current_edge_point, history.color);
                     }
                 }
             }
