@@ -7,6 +7,7 @@ use gpui::{
     StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
 
+use crate::color::ColorManager;
 use crate::commit::CommitNode;
 use crate::edge::{Edge, EdgeManager};
 use crate::lane::LaneManager;
@@ -47,8 +48,8 @@ impl Garph {
     fn recompute(&mut self) {
         self.nodes.clear();
         self.edges.clear();
-        let mut count_color = 0;
-        let mut map_color_lane: HashMap<usize, usize> = HashMap::new();
+
+        let mut color_manager = ColorManager::new(VEC_COLORS.to_vec());
         let mut revwalk = self.repo.revwalk().unwrap();
         revwalk
             .set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME)
@@ -65,20 +66,8 @@ impl Garph {
             let parents: Vec<Oid> = commit.parents().map(|p| p.id()).collect();
             let lane = lane_manager.assign_commit(&oid, &parents) as f32;
 
-            let color = match map_color_lane.get(&(lane as usize)) {
-                Some(color) => *color,
-                _ => {
-                    if count_color < 5 {
-                        count_color += 1;
-                        count_color - 1
-                    } else {
-                        count_color = 0;
-                        count_color
-                    }
-                }
-            };
+            let color = color_manager.get_color(&(lane as usize));
 
-            map_color_lane.insert(lane as usize, color);
             let pos = Point::new(
                 (START_X + lane * LANE_WIDTH).into(),
                 (COMMIT_HEIGHT * index as f32).into(),
@@ -94,7 +83,7 @@ impl Garph {
                         edge_manager.add(from.0.clone(), edge_anchor, from.1);
                         let lane_from = &(from.2 as usize);
                         if lane_from > &0 {
-                            map_color_lane.remove(&(from.2 as usize));
+                            color_manager.remove_lane_color(&(from.2 as usize));
                         }
                     } else if from.0.x < edge_anchor.x {
                         edge_manager.add(edge_anchor, from.0.clone(), color);
