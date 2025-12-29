@@ -15,11 +15,11 @@ impl HistoryOid {
     }
 }
 
-pub struct HistoryOids {
+pub struct HistoryOidManager {
     pub history_oid: HashMap<Oid, Vec<HistoryOid>>,
 }
 
-impl HistoryOids {
+impl HistoryOidManager {
     pub fn new() -> Self {
         Self {
             history_oid: HashMap::new(),
@@ -31,7 +31,7 @@ impl HistoryOids {
             .or_insert_with(Vec::new)
             .push(history_oid);
     }
-    pub fn get(&self, oid: &Oid) -> Option<&Vec<HistoryOid>> {
-        self.history_oid.get(oid)
+    pub fn get(&self, oid: &Oid) -> Option<&[HistoryOid]> {
+        self.history_oid.get(oid).map(|oids| oids.as_slice())
     }
 }

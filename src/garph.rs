@@ -8,7 +8,7 @@ use gpui::{
 use crate::color::ColorManager;
 use crate::commit::CommitNode;
 use crate::edge::{Edge, EdgeManager};
-use crate::history_oid::{HistoryOid, HistoryOids};
+use crate::history_oid::{HistoryOid, HistoryOidManager};
 use crate::lane::LaneManager;
 
 const START_X: f32 = 30.0;
@@ -58,7 +58,7 @@ impl Garph {
         let mut edge_manager = EdgeManager::new();
         let mut color_manager = ColorManager::new(VEC_COLORS.to_vec());
 
-        let mut history_oids_manager = HistoryOids::new();
+        let mut history_oids_manager = HistoryOidManager::new();
 
         for (index, oid) in revwalk.take(LIMIT_ROW).enumerate() {
             let oid = oid.unwrap();
