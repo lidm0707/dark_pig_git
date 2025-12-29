@@ -76,7 +76,6 @@ impl Garph {
             let current_edge_point = Point::new(pos.x + SIZE / 2.0, pos.y);
 
             // connect edges
-            // wrong
             if let Some(history_oids) = history_oids_manager.get(&oid) {
                 for history in history_oids {
                     if history.point.x > current_edge_point.x {
