@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use chrono::DateTime;
 use git2::{Oid, Repository};
 use gpui::{
