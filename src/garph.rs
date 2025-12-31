@@ -30,6 +30,7 @@ pub struct Garph {
     nodes: Vec<CommitNode>,
     edges: Vec<Edge>,
     content_height: Pixels,
+    max_lane: usize,
 }
 
 impl Garph {
@@ -39,6 +40,7 @@ impl Garph {
             nodes: Vec::new(),
             edges: Vec::new(),
             content_height: px(0.0),
+            max_lane: 0,
         }
     }
 
@@ -47,6 +49,7 @@ impl Garph {
     fn recompute(&mut self) {
         self.nodes.clear();
         self.edges.clear();
+        self.max_lane = 0;
 
         let mut revwalk = self.repo.revwalk().unwrap();
         revwalk
@@ -72,6 +75,11 @@ impl Garph {
                 (START_X + (lane as f32) * LANE_WIDTH).into(),
                 (COMMIT_HEIGHT * index as f32).into(),
             );
+
+            // Track maximum lane
+            if lane > self.max_lane {
+                self.max_lane = lane;
+            }
 
             let current_edge_point = Point::new(pos.x + SIZE / 2.0, pos.y);
 
@@ -114,39 +122,54 @@ impl Garph {
 
     /* ---------------- view helpers ---------------- */
 
-    fn node_view(&self, node: &CommitNode) -> impl IntoElement {
-        div()
-            .absolute()
-            .left(node.position.x)
-            .top(node.position.y)
-            .size(SIZE)
-            // .bg(gpui::green())
-            .bg(gpui::rgb(VEC_COLORS[node.color]))
-            .border_color(gpui::black())
-            .rounded(px(5.0))
+    fn clean_message(message: &str) -> String {
+        message.lines().next().unwrap_or(message).to_string()
     }
 
-    fn row_view(&self, node: &CommitNode) -> impl IntoElement {
+    fn combined_row_view(&self, node: &CommitNode) -> impl IntoElement {
+        let message = Self::clean_message(&node.message);
+
+        // Calculate text position based on max lane to ensure no overlap
+        let text_left = START_X + ((self.max_lane + 1) as f32) * LANE_WIDTH + 20.0;
+
         div()
-            .size(SIZE)
             .absolute()
             .top(node.position.y)
-            .left(px(100.0))
-            .bg(gpui::rgb(0x383838))
-            // .bg(gpui::rgb(VEC_COLORS[node.color]))
-            .min_w(px(600.0))
-            .px(px(10.0))
-            .py(px(5.0))
-            .rounded(px(4.0))
+            .left(px(0.0))
+            .right(px(0.0))
             .h(px(COMMIT_HEIGHT))
-            .text_color(gpui::rgb(0x969696))
-            .text_size(px(10.0))
-            .child(format!(
-                "{} — {} — {}",
-                node.author,
-                DateTime::from_timestamp(node.timestamp.seconds(), 0).unwrap(),
-                node.message
-            ))
+            .flex()
+            .flex_row()
+            .items_center()
+            .group("commit-row")
+            .hover(|style| style.bg(gpui::hsla(0.0, 0.0, 0.22, 0.3)))
+            // node
+            .child(
+                div()
+                    .left(node.position.x)
+                    .size(SIZE)
+                    .bg(gpui::rgb(VEC_COLORS[node.color]))
+                    .border_color(gpui::black())
+                    .rounded(px(5.0))
+                    .group_hover("commit-row", |style| style.size(SIZE + px(5.0))),
+            )
+            // text
+            .child(
+                div()
+                    .left(px(text_left))
+                    .px(px(10.0))
+                    .py(px(5.0))
+                    .rounded(px(4.0))
+                    .text_color(gpui::rgb(0x969696))
+                    .text_size(px(10.0))
+                    .line_clamp(1)
+                    .child(format!(
+                        "{} — {} — {}",
+                        node.author,
+                        DateTime::from_timestamp(node.timestamp.seconds(), 0).unwrap(),
+                        message
+                    )),
+            )
     }
 }
 
@@ -183,19 +206,18 @@ impl Render for Garph {
 
                                     path.move_to(start);
                                     let same_lane = (start.x - end.x).abs() < px(0.5);
-
+                                    // straight line
                                     if same_lane {
-                                        // เส้นตรงยาว
                                         path.line_to(end);
                                     } else if start.x > end.x {
                                         let ctrl1 = Point::new(start.x, end.y);
                                         let ctrl2 = Point::new(start.x, end.y);
-
+                                        // curve is feak when line too short or long
                                         path.cubic_bezier_to(end, ctrl1, ctrl2);
                                     } else if start.x < end.x {
                                         let ctrl1 = Point::new(end.x, start.y);
                                         let ctrl2 = Point::new(end.x, start.y);
-
+                                        // curve is feak when line too short or long
                                         path.cubic_bezier_to(end, ctrl1, ctrl2);
                                     }
                                     if let Ok(p) = path.build() {
@@ -208,10 +230,8 @@ impl Render for Garph {
                         .absolute()
                         .size_full(),
                     )
-                    // nodes
-                    .child(div().children(nodes.iter().map(|n| self.node_view(n))))
-                    // rows
-                    .child(div().children(nodes.iter().map(|n| self.row_view(n)))),
+                    // combined rows (node + text)
+                    .child(div().children(nodes.iter().map(|n| self.combined_row_view(n)))),
             )
     }
 }
