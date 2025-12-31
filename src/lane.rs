@@ -16,7 +16,7 @@ impl LaneManager {
 
     /// assign commit to a lane and update lanes for parents
     pub fn assign_commit(&mut self, commit_oid: &Oid, parent_oids: &[Oid]) -> usize {
-        let mut lane = match self
+        let lane = match self
             .lanes
             .iter()
             .position(|slot| slot.as_ref() == Some(commit_oid))
@@ -30,39 +30,20 @@ impl LaneManager {
 
         self.lanes[lane] = None;
 
-        let mut continue_parent = None;
-        let mut parent_lane = None;
+        let mut none_lane: Vec<usize> = self
+            .lanes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, l)| if l.is_none() { Some(i) } else { None })
+            .collect();
 
         for parent in parent_oids {
-            if let Some(idx) = self
-                .lanes
-                .iter()
-                .position(|slot| slot.as_ref() == Some(parent))
-            {
-                continue_parent = Some(*parent);
-                parent_lane = Some(idx);
-                break;
-                // continue;
+            if self.lanes.contains(&Some(*parent)) {
+                continue;
             }
-        }
-
-        if let (Some(parent), Some(p_lane)) = (continue_parent, parent_lane) {
-            if p_lane < lane {
-                self.lanes.remove(p_lane);
-                lane -= 1;
-            } else if p_lane > lane {
-                self.lanes.remove(p_lane);
-            }
-
-            self.lanes[lane] = Some(parent);
-        } else if let Some(parent) = parent_oids.first() {
-            self.lanes[lane] = Some(*parent);
-        }
-
-        for parent in parent_oids {
-            if Some(*parent) != self.lanes[lane]
-                && !self.lanes.iter().any(|s| s.as_ref() == Some(parent))
-            {
+            if let Some(position) = none_lane.pop() {
+                self.lanes[position] = Some(*parent);
+            } else {
                 self.lanes.push(Some(*parent));
             }
         }

@@ -16,12 +16,12 @@ impl ColorManager {
     }
 
     pub fn get_color(&mut self, lane: &usize) -> usize {
+        self.count_color += 1;
         let color = match self.map_color.get(lane) {
             Some(color) => *color,
             _ => {
-                if self.count_color < self.colors.len() + 1 {
-                    self.count_color += 1;
-                    self.count_color - 1
+                if self.count_color < self.colors.len() {
+                    self.count_color
                 } else {
                     self.count_color = 0;
                     self.count_color
