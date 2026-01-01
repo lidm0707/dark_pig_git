@@ -192,6 +192,7 @@ impl Render for Garph {
                 div()
                     .absolute()
                     .w_full()
+                    // can't use h_full because container isn't overflowed.
                     .h(height)
                     // edges
                     .child(
