@@ -1,4 +1,3 @@
-use chrono::DateTime;
 use git2::{Oid, Repository};
 use gpui::{
     Context, InteractiveElement, IntoElement, ParentElement, PathBuilder, Pixels, Point, Render,
@@ -130,7 +129,7 @@ impl Garph {
         let message = Self::clean_message(&node.message);
 
         // Calculate text position based on max lane to ensure no overlap
-        let text_left = START_X + ((self.max_lane + 1) as f32) * LANE_WIDTH + 20.0;
+        let container_text_left = START_X + ((self.max_lane) as f32) * LANE_WIDTH;
 
         div()
             .absolute()
@@ -151,12 +150,12 @@ impl Garph {
                     .bg(gpui::rgb(VEC_COLORS[node.color]))
                     .border_color(gpui::black())
                     .rounded(px(5.0))
-                    .group_hover("commit-row", |style| style.size(SIZE + px(5.0))),
+                    .group_hover("commit-row", |style| style.size(SIZE + px(20.0))),
             )
             // text
             .child(
                 div()
-                    .left(px(text_left))
+                    .left(px(container_text_left))
                     .px(px(10.0))
                     .py(px(5.0))
                     .rounded(px(4.0))
@@ -187,7 +186,8 @@ impl Render for Garph {
             .id("garph")
             .overflow_scroll()
             .bg(gpui::rgb(0x282828))
-            .relative()
+            .absolute()
+            // .relative()
             .child(
                 div()
                     .absolute()
