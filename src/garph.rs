@@ -1,7 +1,8 @@
 use git2::{Oid, Repository};
 use gpui::{
-    Context, InteractiveElement, IntoElement, ParentElement, PathBuilder, Pixels, Point, Render,
-    StatefulInteractiveElement, Styled, Window, canvas, div, px,
+    Context, EventEmitter, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    PathBuilder, Pixels, Point, Render, StatefulInteractiveElement, Styled, Window, canvas, div,
+    px,
 };
 
 use crate::color::ColorManager;
@@ -23,6 +24,15 @@ pub const GIT_GREEN: u32 = 0x2ECC71;
 pub const GIT_BLUE: u32 = 0x3498DB;
 pub const GIT_PURPLE: u32 = 0x9B59B6;
 pub const VEC_COLORS: &[u32] = &[GIT_PURPLE, GIT_BLUE, GIT_RED, GIT_YELLOW, GIT_GREEN];
+
+#[derive(Clone)]
+pub struct CommitSelected {
+    pub oid: Oid,
+    pub message: String,
+    pub author: String,
+    pub timestamp: git2::Time,
+    pub parents: Vec<Oid>,
+}
 
 pub struct Garph {
     repo: Repository,
@@ -124,65 +134,24 @@ impl Garph {
     fn clean_message(message: &str) -> String {
         message.lines().next().unwrap_or(message).to_string()
     }
-
-    fn combined_row_view(&self, node: &CommitNode) -> impl IntoElement {
-        let message = Self::clean_message(&node.message);
-
-        // Calculate text position based on max lane to ensure no overlap
-        let container_text_left = START_X + ((self.max_lane) as f32) * LANE_WIDTH;
-
-        div()
-            .absolute()
-            .top(node.position.y)
-            .left(px(0.0))
-            .right(px(0.0))
-            .h(px(COMMIT_HEIGHT))
-            .flex()
-            .flex_row()
-            .items_center()
-            .group("commit-row")
-            .hover(|style| style.bg(gpui::hsla(0.0, 0.0, 0.22, 0.3)))
-            // node
-            .child(
-                div()
-                    .left(node.position.x)
-                    .size(SIZE)
-                    .bg(gpui::rgb(VEC_COLORS[node.color]))
-                    .border_color(gpui::black())
-                    .rounded(px(5.0))
-                    .group_hover("commit-row", |style| style.size(SIZE + px(20.0))),
-            )
-            // text
-            .child(
-                div()
-                    .left(px(container_text_left))
-                    .px(px(10.0))
-                    .py(px(5.0))
-                    .rounded(px(4.0))
-                    .text_color(gpui::rgb(0x969696))
-                    .text_size(px(10.0))
-                    .line_clamp(1)
-                    .child(format!(
-                        "{}",
-                        // "{} — {} — {}",
-                        // node.author,
-                        // DateTime::from_timestamp(node.timestamp.seconds(), 0).unwrap(),
-                        message
-                    )),
-            )
-    }
 }
 
+impl EventEmitter<CommitSelected> for Garph {}
+
 impl Render for Garph {
-    fn render(&mut self, _w: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _w: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.recompute();
 
         let nodes = self.nodes.clone();
         let edges = self.edges.clone();
         let height = self.content_height;
+        let max_lane = self.max_lane;
 
         div()
             .size_full()
+            .relative()
+            .flex()
+            .flex_col()
             .id("garph")
             .overflow_scroll()
             .bg(gpui::rgb(0x282828))
@@ -233,7 +202,63 @@ impl Render for Garph {
                         .size_full(),
                     )
                     // combined rows (node + text)
-                    .child(div().children(nodes.iter().map(|n| self.combined_row_view(n)))),
+                    .child(div().children(nodes.iter().map(|n| {
+                        let message = Self::clean_message(&n.message);
+                        let oid = n.oid;
+                        let message_text = n.message.clone();
+                        let author_text = n.author.clone();
+                        let timestamp = n.timestamp;
+                        let parents = n.parents.clone();
+
+                        // Calculate text position based on max lane to ensure no overlap
+                        let container_text_left = START_X + (max_lane as f32) * LANE_WIDTH;
+
+                        div()
+                            .absolute()
+                            .top(n.position.y)
+                            .left(px(0.0))
+                            .right(px(0.0))
+                            .h(px(COMMIT_HEIGHT))
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .group("commit-row")
+                            .hover(|style| style.bg(gpui::hsla(0.0, 0.0, 0.22, 0.3)))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |_this, _event, _window, cx| {
+                                    cx.emit(CommitSelected {
+                                        oid,
+                                        message: message_text.clone(),
+                                        author: author_text.clone(),
+                                        timestamp,
+                                        parents: parents.clone(),
+                                    });
+                                }),
+                            )
+                            // node
+                            .child(
+                                div()
+                                    .left(n.position.x)
+                                    .size(SIZE)
+                                    .bg(gpui::rgb(VEC_COLORS[n.color]))
+                                    .border_color(gpui::black())
+                                    .rounded(px(5.0))
+                                    .group_hover("commit-row", |style| style.size(SIZE + px(20.0))),
+                            )
+                            // text
+                            .child(
+                                div()
+                                    .left(px(container_text_left))
+                                    .px(px(10.0))
+                                    .py(px(5.0))
+                                    .rounded(px(4.0))
+                                    .text_color(gpui::rgb(0x969696))
+                                    .text_size(px(10.0))
+                                    .line_clamp(1)
+                                    .child(format!("{}", message)),
+                            )
+                    }))),
             )
     }
 }

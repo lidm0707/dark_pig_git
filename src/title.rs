@@ -41,6 +41,11 @@ impl Render for TitleBar {
             .text_color(gpui::rgb(0xffffff))
             .text_sm()
             .font_weight(gpui::FontWeight::MEDIUM)
+            .on_mouse_down(MouseButton::Left, |event, window, _cx| {
+                // Only start window move if not clicking on the quit button
+                // The quit button will handle its own click event
+                window.start_window_move();
+            })
             .child(
                 div()
                     .flex()
@@ -49,50 +54,38 @@ impl Render for TitleBar {
                     .child(self.title.clone()),
             )
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .w(px(12.0))
-                                    .h(px(12.0))
-                                    .rounded_full()
-                                    .bg(gpui::rgb(0xff5f57)),
-                            )
-                            .child(
-                                div()
-                                    .w(px(12.0))
-                                    .h(px(12.0))
-                                    .rounded_full()
-                                    .bg(gpui::rgb(0xfebc2e)),
-                            )
-                            .child(
-                                div()
-                                    .w(px(12.0))
-                                    .h(px(12.0))
-                                    .rounded_full()
-                                    .bg(gpui::rgb(0x28c840)),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .px_3()
-                            .py_1()
-                            .rounded_md()
-                            .bg(gpui::rgb(0xff5f57))
-                            .text_color(gpui::rgb(0xffffff))
-                            .cursor_pointer()
-                            .child(quit_text)
-                            .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
-                                cx.quit();
-                            }),
-                    ),
+                div().flex().items_center().gap_2().child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .child(
+                            div()
+                                .w(px(12.0))
+                                .h(px(12.0))
+                                .rounded_full()
+                                .bg(gpui::rgb(0x28c840)),
+                        )
+                        .child(
+                            div()
+                                .w(px(12.0))
+                                .h(px(12.0))
+                                .rounded_full()
+                                .bg(gpui::rgb(0xfebc2e)),
+                        )
+                        .child(
+                            div()
+                                .w(px(12.0))
+                                .h(px(12.0))
+                                .rounded_full()
+                                .bg(gpui::rgb(0xff5f57))
+                                .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
+                                    // Stop propagation so the title bar doesn't receive this event
+                                    cx.stop_propagation();
+                                    cx.quit();
+                                }),
+                        ),
+                ),
             )
     }
 }
