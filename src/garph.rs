@@ -155,7 +155,7 @@ impl Render for Garph {
             .id("garph")
             .overflow_scroll()
             .bg(gpui::rgb(0x282828))
-            .absolute()
+            // .absolute()
             // .relative()
             .child(
                 div()

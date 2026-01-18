@@ -1,9 +1,10 @@
 use gpui::{
-    AnyElement, AppContext, Context, Entity, EventEmitter, IntoElement, ParentElement, Render,
-    Styled, Window, div,
+    AnyElement, AppContext, Context, Entity, EventEmitter, InteractiveElement, IntoElement,
+    MouseButton, ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
 };
 
 use crate::garph::{CommitSelected, Garph};
+use crate::menu::{DropdownEvent, MenuBar};
 use crate::title::TitleBar;
 
 pub struct Dock;
@@ -11,6 +12,7 @@ pub struct Pane;
 pub struct Workspace {
     dock: Option<Entity<Garph>>,
     title_bar: Entity<TitleBar>,
+    menu_bar: Entity<MenuBar>,
     selected_commit: Option<CommitSelected>,
     // pane: Vec<Entity<AnyElement>>,
 }
@@ -21,9 +23,12 @@ impl Workspace {
         if let Some(dock) = dock {
             cx.subscribe(&dock, Self::on_commit_selected).detach();
         }
+        let menu_bar = cx.new(|_| MenuBar::new());
+        cx.subscribe(&menu_bar, Self::on_dropdown_changed).detach();
         Self {
             dock: dock_clone,
             title_bar: cx.new(|_| TitleBar::new("Dark Pig Git")),
+            menu_bar,
             selected_commit: None,
         }
     }
@@ -35,6 +40,15 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         self.set_selected_commit(Some(event.clone()), cx);
+    }
+
+    fn on_dropdown_changed(
+        &mut self,
+        _menu_bar: Entity<MenuBar>,
+        _event: &DropdownEvent,
+        cx: &mut Context<Self>,
+    ) {
+        cx.notify();
     }
 
     pub fn set_title(&mut self, title: &str, cx: &mut Context<Self>) {
@@ -67,6 +81,7 @@ impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let dock = self.dock.clone().unwrap();
         let title_bar = self.title_bar.clone();
+        let menu_bar = self.menu_bar.clone();
         let selected_commit = self.selected_commit.clone();
 
         let pane_content = if let Some(commit) = selected_commit {
@@ -221,13 +236,122 @@ impl Render for Workspace {
             .relative()
             .flex()
             .flex_col()
+            .on_mouse_down(
+                MouseButton::Left,
+                _cx.listener(|this, _event, _window, cx| {
+                    if this.menu_bar.read(cx).is_dropdown_open() {
+                        this.menu_bar.update(cx, |menu_bar, cx| {
+                            menu_bar.close_dropdown(cx);
+                        });
+                        cx.notify();
+                    }
+                }),
+            )
             .child(title_bar)
+            .child(menu_bar)
             .child(
                 div()
                     .flex_1()
                     .flex()
+                    .relative()
                     .child(div().w(gpui::px(300.0)).h_full().child(dock))
                     .child(div().flex_1().bg(gpui::white()).child(pane_content)),
             )
+            .when(self.menu_bar.read(_cx).is_dropdown_open(), |this| {
+                this.child(
+                    div()
+                        .id("file_menu_dropdown")
+                        .text_color(gpui::white())
+                        .absolute()
+                        .top(px(36.0))
+                        .left(px(0.0))
+                        .bg(gpui::rgb(0x1a1a1a))
+                        .border_1()
+                        .border_color(gpui::rgb(0x333333))
+                        .shadow_lg()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            _cx.listener(|_this, event, _window, cx| {
+                                cx.stop_propagation();
+                            }),
+                        )
+                        .child(
+                            div()
+                                .id("menu_item_new")
+                                .text_color(gpui::white())
+                                .px(px(16.0))
+                                .py(px(8.0))
+                                .child("New")
+                                .hover(|style| style.bg(gpui::rgb(0x333333)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    _cx.listener(|this, _event, _window, cx| {
+                                        this.menu_bar.update(cx, |menu_bar, cx| {
+                                            menu_bar.close_dropdown(cx);
+                                        });
+                                        cx.notify();
+                                        cx.stop_propagation();
+                                    }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("menu_item_open")
+                                .text_color(gpui::white())
+                                .px(px(16.0))
+                                .py(px(8.0))
+                                .child("Open")
+                                .hover(|style| style.bg(gpui::rgb(0x333333)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    _cx.listener(|this, _event, _window, cx| {
+                                        this.menu_bar.update(cx, |menu_bar, cx| {
+                                            menu_bar.close_dropdown(cx);
+                                        });
+                                        cx.notify();
+                                        cx.stop_propagation();
+                                    }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("menu_item_save")
+                                .text_color(gpui::white())
+                                .px(px(16.0))
+                                .py(px(8.0))
+                                .child("Save")
+                                .hover(|style| style.bg(gpui::rgb(0x333333)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    _cx.listener(|this, _event, _window, cx| {
+                                        this.menu_bar.update(cx, |menu_bar, cx| {
+                                            menu_bar.close_dropdown(cx);
+                                        });
+                                        cx.notify();
+                                        cx.stop_propagation();
+                                    }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("menu_item_exit")
+                                .text_color(gpui::white())
+                                .px(px(16.0))
+                                .py(px(8.0))
+                                .child("Exit")
+                                .hover(|style| style.bg(gpui::rgb(0x333333)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    _cx.listener(|this, _event, _window, cx| {
+                                        this.menu_bar.update(cx, |menu_bar, cx| {
+                                            menu_bar.close_dropdown(cx);
+                                        });
+                                        cx.notify();
+                                        cx.stop_propagation();
+                                    }),
+                                ),
+                        ),
+                )
+            })
     }
 }
