@@ -3,9 +3,10 @@ use gpui::{
     MouseButton, ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
 };
 
+use crate::actions::Quit;
 use crate::garph::{CommitSelected, Garph};
 use crate::menu::{DropdownEvent, MenuBar};
-use crate::title::TitleBar;
+use crate::title::{QuitClicked, TitleBar};
 
 pub struct Dock;
 pub struct Pane;
@@ -25,9 +26,11 @@ impl Workspace {
         }
         let menu_bar = cx.new(|_| MenuBar::new());
         cx.subscribe(&menu_bar, Self::on_dropdown_changed).detach();
+        let title_bar = cx.new(|_| TitleBar::new("Dark Pig Git"));
+        cx.subscribe(&title_bar, Self::on_quit_clicked).detach();
         Self {
             dock: dock_clone,
-            title_bar: cx.new(|_| TitleBar::new("Dark Pig Git")),
+            title_bar,
             menu_bar,
             selected_commit: None,
         }
@@ -49,6 +52,15 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         cx.notify();
+    }
+
+    fn on_quit_clicked(
+        &mut self,
+        _title_bar: Entity<TitleBar>,
+        _event: &QuitClicked,
+        cx: &mut Context<Self>,
+    ) {
+        cx.dispatch_action(&Quit);
     }
 
     pub fn set_title(&mut self, title: &str, cx: &mut Context<Self>) {

@@ -7,5 +7,6 @@ pub mod history_oid;
 pub mod lane;
 pub mod menu;
 
+pub mod actions;
 pub mod title;
 pub mod workspace;
