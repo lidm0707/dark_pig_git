@@ -1,10 +1,11 @@
+use gpui::prelude::*;
 use gpui::{
     AnyElement, AppContext, Context, Entity, EventEmitter, InteractiveElement, IntoElement,
-    MouseButton, ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
+    MouseButton, ParentElement, Render, Styled, Window, div, px,
 };
 
 use crate::actions::{OpenFile, Quit};
-use crate::garph::{CommitSelected, Garph};
+use crate::garph::{ChangedFile, CommitSelected, Garph};
 use crate::menu::{DropdownEvent, MenuBar};
 use crate::title::{QuitClicked, TitleBar};
 
@@ -15,7 +16,19 @@ pub struct Workspace {
     title_bar: Entity<TitleBar>,
     menu_bar: Entity<MenuBar>,
     selected_commit: Option<CommitSelected>,
+    changed_files: Vec<ChangedFile>,
+    selected_file: Option<usize>,
+    file_diff: Option<String>,
+    active_pane: ActivePane,
+    loading_diff: bool,
+    current_commit_oid: Option<git2::Oid>,
     // pane: Vec<Entity<AnyElement>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ActivePane {
+    Dock,
+    Content,
 }
 
 impl Workspace {
@@ -30,16 +43,351 @@ impl Workspace {
             title_bar,
             menu_bar,
             selected_commit: None,
+            changed_files: Vec::new(),
+            selected_file: None,
+            file_diff: None,
+            active_pane: ActivePane::Content,
+            loading_diff: false,
+            current_commit_oid: None,
         }
     }
 
     fn on_commit_selected(
         &mut self,
-        _garph: Entity<Garph>,
+        garph: Entity<Garph>,
         event: &CommitSelected,
         cx: &mut Context<Self>,
     ) {
-        self.set_selected_commit(Some(event.clone()), cx);
+        let event_clone = event.clone();
+
+        self.set_selected_commit(Some(event_clone.clone()), cx);
+
+        // Immediately load changed files when commit is selected
+        self.load_changed_files(&garph, &event_clone, cx);
+    }
+
+    fn load_changed_files(
+        &mut self,
+        garph: &Entity<Garph>,
+        commit: &CommitSelected,
+        cx: &mut Context<Self>,
+    ) {
+        let files = garph.update(cx, |garph, _cx| {
+            match garph.get_changed_files(&commit.oid) {
+                Ok(files) => files,
+                Err(e) => {
+                    eprintln!("Failed to get changed files: {}", e);
+                    Vec::new()
+                }
+            }
+        });
+
+        self.changed_files = files;
+        self.selected_file = None;
+        self.file_diff = None;
+        self.current_commit_oid = Some(commit.oid);
+        cx.notify();
+    }
+
+    fn on_file_selected(
+        &mut self,
+        file_index: usize,
+        garph: Entity<Garph>,
+        cx: &mut Context<Self>,
+    ) {
+        // Safety check to prevent out of bounds
+        if file_index >= self.changed_files.len() {
+            eprintln!(
+                "Invalid file index: {} (total files: {})",
+                file_index,
+                self.changed_files.len()
+            );
+            return;
+        }
+
+        self.selected_file = Some(file_index);
+        self.loading_diff = true;
+        cx.notify();
+
+        let file = self.changed_files[file_index].clone();
+
+        // Get commit OID - if none available, show error
+        let commit_oid = match self.current_commit_oid {
+            Some(oid) => oid,
+            None => {
+                self.file_diff = Some("No commit selected".to_string());
+                self.loading_diff = false;
+                cx.notify();
+                return;
+            }
+        };
+
+        let diff_content = garph.update(cx, |garph, _cx| {
+            match garph.compute_file_diff(&commit_oid, &file.path) {
+                Ok(diff) => diff,
+                Err(e) => format!("Failed to compute diff: {}", e),
+            }
+        });
+
+        self.file_diff = Some(diff_content);
+        self.loading_diff = false;
+        cx.notify();
+    }
+
+    fn on_back_to_file_list(&mut self, cx: &mut Context<Self>) {
+        self.selected_file = None;
+        self.file_diff = None;
+        self.loading_diff = false;
+        cx.notify();
+    }
+
+    fn render_file_list(&self, dock: &Entity<Garph>, cx: &mut Context<Self>) -> AnyElement {
+        if self.changed_files.is_empty() {
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size_full()
+                .bg(gpui::rgb(0x1E1E1E))
+                .text_color(gpui::rgb(0x888888))
+                .child("No files changed in this commit")
+                .into_any()
+        } else {
+            let dock_for_file = dock.clone();
+            div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .bg(gpui::rgb(0x1E1E1E))
+                .child(
+                    div()
+                        .w_full()
+                        .px(px(12.0))
+                        .py(px(8.0))
+                        .border_b_1()
+                        .border_color(gpui::rgb(0x333333))
+                        .bg(gpui::rgb(0x252525))
+                        .text_color(gpui::white())
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_size(px(14.0))
+                        .child(format!("Changed Files ({})", self.changed_files.len())),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .bg(gpui::rgb(0x1E1E1E))
+                        .flex()
+                        .flex_col()
+                        .children(self.changed_files.iter().enumerate().map(|(index, file)| {
+                            let dock_for_file_clone = dock_for_file.clone();
+                            let file_path = file.path.clone();
+                            let status = file.status;
+
+                            let status_color = match status {
+                                git2::Delta::Added => gpui::rgb(0x2ECC71),
+                                git2::Delta::Deleted => gpui::rgb(0xE74C3C),
+                                git2::Delta::Modified => gpui::rgb(0xF39C12),
+                                git2::Delta::Renamed => gpui::rgb(0x3498DB),
+                                git2::Delta::Copied => gpui::rgb(0x9B59B6),
+                                _ => gpui::rgb(0x888888),
+                            };
+
+                            let status_text = match status {
+                                git2::Delta::Added => "A",
+                                git2::Delta::Deleted => "D",
+                                git2::Delta::Modified => "M",
+                                git2::Delta::Renamed => "R",
+                                git2::Delta::Copied => "C",
+                                _ => "?",
+                            };
+
+                            div()
+                                .w_full()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .px(px(12.0))
+                                .py(px(8.0))
+                                .border_b_1()
+                                .border_color(gpui::rgb(0x2A2A2A))
+                                .hover(|style| style.bg(gpui::rgb(0x2A2A2A)))
+                                .cursor_pointer()
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _event, _window, cx| {
+                                        this.on_file_selected(
+                                            index,
+                                            dock_for_file_clone.clone(),
+                                            cx,
+                                        );
+                                    }),
+                                )
+                                .child(
+                                    div()
+                                        .w(px(30.0))
+                                        .text_color(status_color)
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .text_size(px(12.0))
+                                        .child(status_text),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .text_color(gpui::rgb(0xCCCCCC))
+                                        .text_size(px(13.0))
+                                        .font_family("monospace")
+                                        .child(file_path),
+                                )
+                                .into_any()
+                        })),
+                )
+                .into_any()
+        }
+    }
+
+    fn render_file_diff(&self, cx: &mut Context<Self>) -> AnyElement {
+        if self.loading_diff {
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size_full()
+                .bg(gpui::rgb(0x1E1E1E))
+                .flex_col()
+                .gap_4()
+                .child(
+                    div()
+                        .text_color(gpui::rgb(0x888888))
+                        .text_size(px(14.0))
+                        .child("Loading diff..."),
+                )
+                .child(
+                    div()
+                        .text_color(gpui::rgb(0x666666))
+                        .text_size(px(12.0))
+                        .child("Computing file differences"),
+                )
+                .into_any()
+        } else if let Some(file_index) = self.selected_file {
+            // Safety check to prevent out of bounds
+            if file_index >= self.changed_files.len() {
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size_full()
+                    .bg(gpui::rgb(0x1E1E1E))
+                    .text_color(gpui::rgb(0xE74C3C))
+                    .child("Error: Invalid file selection")
+                    .into_any()
+            } else {
+                let file = &self.changed_files[file_index];
+                let title = format!("Diff: {}", file.path);
+                let diff_content = self
+                    .file_diff
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_else(|| "No diff available".to_string());
+
+                div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .bg(gpui::rgb(0x1E1E1E))
+                    // Header with back button
+                    .child(
+                        div()
+                            .w_full()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .px(px(12.0))
+                            .py(px(8.0))
+                            .border_b_1()
+                            .border_color(gpui::rgb(0x333333))
+                            .bg(gpui::rgb(0x252525))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .text_color(gpui::rgb(0x888888))
+                                            .text_size(px(16.0))
+                                            .px(px(8.0))
+                                            .py(px(4.0))
+                                            .cursor_pointer()
+                                            .hover(|style| style.bg(gpui::rgb(0x444444)))
+                                            .rounded(px(4.0))
+                                            .child("←")
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(|this, _event, _window, cx| {
+                                                    this.on_back_to_file_list(cx);
+                                                }),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_color(gpui::white())
+                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .text_size(px(14.0))
+                                            .child(title),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_color(gpui::rgb(0x888888))
+                                    .text_size(px(16.0))
+                                    .px(px(8.0))
+                                    .py(px(4.0))
+                                    .cursor_pointer()
+                                    .hover(|style| style.bg(gpui::rgb(0x444444)))
+                                    .rounded(px(4.0))
+                                    .child("✕")
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(|this, _event, _window, cx| {
+                                            this.on_back_to_file_list(cx);
+                                        }),
+                                    ),
+                            ),
+                    )
+                    // Diff content
+                    .child(
+                        div()
+                            .flex_1()
+                            .id("file_diff_content")
+                            .bg(gpui::rgb(0x1E1E1E))
+                            .flex()
+                            .flex_col()
+                            .overflow_y_scroll()
+                            .px(px(12.0))
+                            .py(px(8.0))
+                            .child(
+                                div()
+                                    .text_color(gpui::rgb(0xCCCCCC))
+                                    .text_size(px(12.0))
+                                    .font_family("monospace")
+                                    .child(diff_content),
+                            ),
+                    )
+                    .into_any()
+            }
+        } else {
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size_full()
+                .bg(gpui::rgb(0x1E1E1E))
+                .text_color(gpui::rgb(0x888888))
+                .child("Select a file to view diff")
+                .into_any()
+        }
     }
 
     fn on_dropdown_changed(
@@ -101,156 +449,10 @@ impl Render for Workspace {
         let dock = self.dock.clone().unwrap();
         let title_bar = self.title_bar.clone();
         let menu_bar = self.menu_bar.clone();
-        let selected_commit = self.selected_commit.clone();
+
         // let path_repo = window.use_state(cx, |_, cx| cx.new(|_| "".to_string()));
         // let repo = git2::Repository::open(&path_repo.read(cx).read(cx)).unwrap();
         // let garph = Garph::new(repo);
-        let pane_content = if let Some(commit) = selected_commit {
-            let timestamp = chrono::DateTime::from_timestamp(commit.timestamp.seconds(), 0)
-                .unwrap_or_default()
-                .format("%Y-%m-%d %H:%M:%S")
-                .to_string();
-
-            let message_lines: Vec<String> =
-                commit.message.lines().take(5).map(String::from).collect();
-            let message_display = message_lines.join("\n");
-            let has_more = commit.message.lines().count() > 5;
-
-            div()
-                .p_4()
-                .flex()
-                .flex_col()
-                .gap_4()
-                .child(
-                    div()
-                        .text_2xl()
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(gpui::rgb(0x000000))
-                        .child("Selected Commit"),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(gpui::rgb(0x333333))
-                                .child("Author"),
-                        )
-                        .child(div().text_color(gpui::rgb(0x000000)).child(commit.author)),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(gpui::rgb(0x333333))
-                                .child("Date"),
-                        )
-                        .child(div().text_color(gpui::rgb(0x000000)).child(timestamp)),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(gpui::rgb(0x333333))
-                                .child("Message"),
-                        )
-                        .children({
-                            let mut children: Vec<AnyElement> = vec![
-                                div()
-                                    .text_color(gpui::rgb(0x000000))
-                                    .child(message_display)
-                                    .into_any_element(),
-                            ];
-                            if has_more {
-                                children.push(
-                                    div()
-                                        .text_color(gpui::rgb(0x666666))
-                                        .child("...")
-                                        .into_any_element(),
-                                );
-                            }
-                            children
-                        }),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(gpui::rgb(0x333333))
-                                .child("Parents"),
-                        )
-                        .children(if commit.parents.is_empty() {
-                            vec![
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .gap_1()
-                                    .child(div().text_color(gpui::rgb(0x666666)).child("None"))
-                                    .into_any_element(),
-                            ]
-                        } else {
-                            commit
-                                .parents
-                                .iter()
-                                .map(|oid| {
-                                    div()
-                                        .flex()
-                                        .flex_col()
-                                        .gap_1()
-                                        .child(
-                                            div()
-                                                .text_color(gpui::rgb(0x000000))
-                                                .child(oid.to_string()),
-                                        )
-                                        .into_any_element()
-                                })
-                                .collect()
-                        }),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(gpui::rgb(0x333333))
-                                .child("Commit Hash"),
-                        )
-                        .child(
-                            div()
-                                .text_color(gpui::rgb(0x000000))
-                                .font_family("monospace")
-                                .child(commit.oid.to_string()),
-                        ),
-                )
-        } else {
-            div()
-                .p_4()
-                .text_color(gpui::rgb(0x666666))
-                .child("Click on a commit to view its details")
-        };
 
         div()
             .size_full()
@@ -275,8 +477,53 @@ impl Render for Workspace {
                     .flex_1()
                     .flex()
                     .relative()
-                    .child(div().w(gpui::px(300.0)).h_full().child(dock))
-                    .child(div().flex_1().bg(gpui::white()).child(pane_content)),
+                    .child(
+                        div()
+                            .w(gpui::px(300.0))
+                            .h_full()
+                            .border_r_1()
+                            .border_color(if self.active_pane == ActivePane::Dock {
+                                gpui::rgb(0x4A90D9)
+                            } else {
+                                gpui::rgb(0xE5E5E5)
+                            })
+                            .bg(if self.active_pane == ActivePane::Dock {
+                                gpui::rgb(0xF0F8FF)
+                            } else {
+                                gpui::rgb(0x282828)
+                            })
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _event, _window, cx| {
+                                    this.active_pane = ActivePane::Dock;
+                                    cx.notify();
+                                }),
+                            )
+                            .child(dock.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .bg(gpui::rgb(0x1E1E1E))
+                            .border_l_1()
+                            .border_color(if self.active_pane == ActivePane::Content {
+                                gpui::rgb(0x4A90D9)
+                            } else {
+                                gpui::rgb(0xE5E5E5)
+                            })
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _event, _window, cx| {
+                                    this.active_pane = ActivePane::Content;
+                                    cx.notify();
+                                }),
+                            )
+                            .child(if self.selected_file.is_some() {
+                                self.render_file_diff(cx)
+                            } else {
+                                self.render_file_list(&dock, cx)
+                            }),
+                    ),
             )
             .when(self.menu_bar.read(cx).is_dropdown_open(), |this| {
                 this.child(
