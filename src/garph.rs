@@ -16,6 +16,7 @@ use std::rc::Rc;
 
 const START_X: f32 = 30.0;
 const LANE_WIDTH: f32 = 15.0;
+const TEXT_GAP: f32 = 20.0;
 const COMMIT_HEIGHT: f32 = 20.0;
 const SIZE: Pixels = px(10.0);
 const GAP_ROW: f32 = 40.0;
@@ -737,6 +738,14 @@ impl Garph {
     fn clean_message(message: &str) -> String {
         message.lines().next().unwrap_or(message).to_string()
     }
+
+    fn truncate_message(message: &str, max_chars: usize) -> String {
+        if message.chars().count() <= max_chars {
+            message.to_string()
+        } else {
+            format!("{}...", message.chars().take(max_chars).collect::<String>())
+        }
+    }
 }
 
 impl EventEmitter<CommitSelected> for Garph {}
@@ -851,12 +860,14 @@ impl Render for Garph {
                         let message = Self::clean_message(&n.message);
                         let oid = n.oid;
                         let message_text = n.message.clone();
+                        let truncated_message = Self::truncate_message(&message, 80);
                         let author_text = n.author.clone();
                         let timestamp = n.timestamp;
                         let parents = n.parents.clone();
 
                         // Calculate text position based on max lane to ensure no overlap
-                        let container_text_left = START_X + (max_lane as f32) * LANE_WIDTH;
+                        let container_text_left =
+                            START_X + (max_lane as f32) * LANE_WIDTH + TEXT_GAP;
 
                         div()
                             .absolute()
@@ -864,9 +875,6 @@ impl Render for Garph {
                             .left(px(0.0))
                             .right(px(0.0))
                             .h(px(COMMIT_HEIGHT))
-                            .flex()
-                            .flex_row()
-                            .items_center()
                             .group("commit-row")
                             .hover(|style| style.bg(gpui::hsla(0.0, 0.0, 0.22, 0.3)))
                             .on_mouse_down(
@@ -881,9 +889,10 @@ impl Render for Garph {
                                     });
                                 }),
                             )
-                            // node
+                            // node (independent absolute positioning)
                             .child(
                                 div()
+                                    .absolute()
                                     .left(n.position.x)
                                     .size(SIZE)
                                     .bg(gpui::rgb(VEC_COLORS[n.color]))
@@ -891,17 +900,21 @@ impl Render for Garph {
                                     .rounded(px(5.0))
                                     .group_hover("commit-row", |style| style.size(SIZE + px(20.0))),
                             )
-                            // text
+                            // text (independent absolute positioning)
                             .child(
                                 div()
+                                    .absolute()
                                     .left(px(container_text_left))
                                     .px(px(10.0))
                                     .py(px(5.0))
+                                    .max_w(px(600.0))
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
                                     .rounded(px(4.0))
                                     .text_color(gpui::rgb(0x969696))
                                     .text_size(px(10.0))
                                     .line_clamp(1)
-                                    .child(format!("{}", message)),
+                                    .child(format!("{}", truncated_message)),
                             )
                     }))),
             )
